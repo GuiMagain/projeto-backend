@@ -17,84 +17,44 @@ historico_emprestimos: List[dict] = []
 # ---------------------------------------------------------
 # Modelos de Dados (Estruturas de Entrada)
 # ---------------------------------------------------------
+
+meus_livros = {}
+
 class Livro(BaseModel):
     nome_livro: str
     autor_livro: str
     ano_livro: int
 
-class AtualizarQuantidade(BaseModel):
-    quantidade: int
-
-class Emprestimo(BaseModel):
-    nome_livro: str
-    quantidade: int
-
-# ---------------------------------------------------------
-# Rotas (Endpoints) da API
-# ---------------------------------------------------------
-
-# 1. Adicionar livro (POST)
-@app.post("/livros", status_code=201)
-def adicionar_livro(livro: Livro):
-    if livro.titulo in livros:
-        raise HTTPException(status_code=400, detail="Livro já existe no sistema.")
-    
-    livros[livro.titulo] = {"autor": livro.autor, "quantidade": livro.quantidade}
-    return {"mensagem": f"Livro '{livro.titulo}' adicionado com sucesso!"}
-
-# 2. Listar livros (GET)
 @app.get("/livros")
-def listar_livros():
-    if not livros:
-        return {"mensagem": "Nenhum livro cadastrado na biblioteca no momento."}
-    
-    # Retornando a lista em formato estruturado (JSON)
-    lista_formatada = [
-        {"titulo": t, "autor": d["autor"], "quantidade": d["quantidade"]}
-        for t, d in sorted(livros.items())
-    ]
-    return {"livros": lista_formatada}
+def get_livro():
+    if not meus_livros:
+        raise HTTPException(status_code=404, detail="Nenhum livro encontrado.")
+    return meus_livros
 
-# 3. Remover livro (DELETE)
-@app.delete("/livros/{titulo}")
-def remover_livro(titulo: str):
-    if titulo not in livros:
-        raise HTTPException(status_code=404, detail="Livro não encontrado no sistema.")
+@app.post("/adiciona")
+def post_livro(id_livro: int, livro: Livro):
+    """
+    Adiciona um novo livro à biblioteca.
+    """
+    if id_livro in livros:
+        raise HTTPException(status_code=400, detail="Livro já existe.")
     
-    del livros[titulo]
-    return {"mensagem": f"Livro '{titulo}' removido com sucesso!"}
+    meus_livros[id_livro] = livro.dict()
+    return {"message": "Livro adicionado com sucesso.", "livro": livros[id_livro]}
 
-# 4. Atualizar quantidade de livros (PUT)
-@app.put("/livros/{titulo}")
-def atualizar_quantidade(titulo: str, atualizacao: AtualizarQuantidade):
-    if titulo not in livros:
-        raise HTTPException(status_code=404, detail="Livro não encontrado no sistema.")
-    
-    livros[titulo]["quantidade"] = atualizacao.quantidade
-    return {"mensagem": f"Quantidade do livro '{titulo}' atualizada para {atualizacao.quantidade}."}
+@app.put("/atualiza/{id_livro}")
+def put_livro(id_livro: int, livro: Livro):
+    meu_livro = meus_livros.get(id_livro)
+    if not meu_livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado.")
+    else:
+        meu_livro[id_livro] = livro.dict()
+    return {"message": "Livro atualizado com sucesso.", "livro": meu_livro[id_livro]}
 
-# 5. Registrar empréstimo (POST)
-@app.post("/emprestimos")
-def registrar_emprestimo(emprestimo: Emprestimo):
-    titulo = emprestimo.titulo
-    qtd = emprestimo.quantidade
-
-    if titulo not in livros:
-        raise HTTPException(status_code=404, detail="Livro não encontrado no sistema.")
-    
-    if qtd > livros[titulo]["quantidade"]:
-        raise HTTPException(status_code=400, detail="Não há exemplares suficientes disponíveis.")
-    
-    # Deduz a quantidade e registra no histórico
-    livros[titulo]["quantidade"] -= qtd
-    historico_emprestimos.append({"titulo": titulo, "quantidade": qtd})
-    
-    return {"mensagem": f"Empréstimo de {qtd} exemplar(es) de '{titulo}' registrado com sucesso!"}
-
-# 6. Exibir histórico de empréstimos (GET)
-@app.get("/emprestimos")
-def listar_historico_emprestimos():
-    if not historico_emprestimos:
-        return {"mensagem": "Nenhum empréstimo foi registrado ainda."}
-    
-    return {"historico": historico_emprestimos}
+@app.delete("/deletar/{id_livro}")
+def delete_livro(id_livro: int):
+    if id_livro not in meus_livros:
+        raise HTTPException(status_code=404, detail="Livro não encontrado.")
+    else:
+        del meus_livros[id_livro]
+        return {"message": "Livro deletado com sucesso."}
