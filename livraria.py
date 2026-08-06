@@ -44,12 +44,12 @@ def post_livro(id_livro: int, livro: Livro):
 
 @app.put("/atualiza/{id_livro}")
 def put_livro(id_livro: int, livro: Livro):
-    meu_livro = meus_livros.get(id_livro)
-    if not meu_livro:
+    meus_livro = meus_livros.get(id_livro)
+    if not meus_livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado.")
     else:
-        meu_livro[id_livro] = livro.dict()
-    return {"message": "Livro atualizado com sucesso.", "livro": meu_livro[id_livro]}
+        meus_livro[id_livro] = livro.dict()
+    return {"message": "Livro atualizado com sucesso.", "livro": meus_livro[id_livro]}
 
 @app.delete("/deletar/{id_livro}")
 def delete_livro(id_livro: int):
