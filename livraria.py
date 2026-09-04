@@ -7,6 +7,16 @@ from fastapi.security import  HTTPBasic, HTTPBasicCredentials
 import secrets
 import os
 
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import Session
+
+DATABASE_URL = "sqlite:///.livraria.db"
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
 # Inicializa a API
 app = FastAPI(
     title="API de Gerenciamento de Biblioteca",
@@ -23,22 +33,28 @@ MINHA_SENHA = "794613825Gui@"
 
 security = HTTPBasic()
 
-# ---------------------------------------------------------
-# Banco de Dados em Memória (Variáveis)
-# ---------------------------------------------------------
-livros: Dict[str, dict] = {}
-historico_emprestimos: List[dict] = []
-
-# ---------------------------------------------------------
-# Modelos de Dados (Estruturas de Entrada)
-# ---------------------------------------------------------
-
 meus_livros = {}
+
+class LivroDB(Base): #tabela de banco de dados para armazenar os livros, substituindo a estrutura de dados em memória (dicionário)
+    __tablename__ = "livros"
+    id = Column(Integer, primary_key=True, index=True)
+    nome_livro = Column(String, index=True)
+    autor_livro = Column(String, index=True)
+    ano_livro = Column(Integer)
 
 class Livro(BaseModel):
     nome_livro: str
     autor_livro: str
     ano_livro: int
+
+Base.metadata.create_all(bind=engine) #cria as tabelas no banco de dados, caso não existam
+
+def sessao_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 def autenticar_meu_usuario(credentials: HTTPBasicCredentials = Depends(security)):
     is_username_correct = secrets.compare_digest(credentials.username, MEU_USUARIO)
@@ -52,52 +68,60 @@ def autenticar_meu_usuario(credentials: HTTPBasicCredentials = Depends(security)
         )
 
 @app.get("/livros")
-def get_livro(page: int=1, limit: int=10, credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
+def get_livro(page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
     if page < 1 or limit <1:
         raise HTTPException(status_code=400, detail="Page ou limit estão com valores inválidos. Devem ser maiores que 0.")
 
-    if not meus_livros:
+    livros = db.query(LivroDB).offset((page-1) * limit).limit(limit).all()
+
+    if not livros:
         return {"message": "Nenhum livro encontrado."}
 
-    livros_ordenados = sorted(meus_livros.items(), key=lambda x: x[0])
+    total_livros = db.query(LivroDB).count()
 
-    start = (page - 1) * limit
-    end = start + limit
-
-    livros_paginados = [
-        {"id": id_livro, "nome_livro": livro_data["nome_livro"], "autor_livro": livro_data["autor_livro"], "ano_livro": livro_data["ano_livro"]}
-        for id_livro, livro_data in livros_ordenados[start:end]
-    ]
     return {
         "page": page,
         "limit": limit,
-        "total": len(meus_livros),
-        "meus_livros": livros_paginados
+        "total": total_livros,
+        "meus_livros": [{"id": livro.id, "nome_livro": livro.nome_livro, "autor_livro": livro.autor_livro, "ano_livro": livro.ano_livro} for livro in livros]
     }
 
 @app.post("/adiciona")
-def post_livro(id_livro: int, livro: Livro):
-    """
-    Adiciona um novo livro à biblioteca.
-    """
-    if id_livro in meus_livros:
-        raise HTTPException(status_code=400, detail="Livro já existe.")
+def post_livro(livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
+    db_livro = db.query(LivroDB).filter(LivroDB.nome_livro == livro.nome_livro, LivroDB.autor_livro == livro.autor_livro).first()
+    if db_livro:
+        raise HTTPException(status_code=400, detail="Esse livro já existe dentro do banco de dados!")
 
-    meus_livros[id_livro] = livro.dict()
-    return {"message": "Livro adicionado com sucesso.", "livro": meus_livros[id_livro]}
+    novo_livro = LivroDB(nome_livro=livro.nome_livro, autor_livro=livro.autor_livro, ano_livro=livro.ano_livro)
+    db.add(novo_livro)
+    db.commit()
+    db.refresh(novo_livro)
+
+    return {"message": "Livro adicionado com sucesso!", "livro": {"id": novo_livro.id, "nome_livro": novo_livro.nome_livro, "autor_livro": novo_livro.autor_livro, "ano_livro": novo_livro.ano_livro}} 
 
 @app.put("/atualiza/{id_livro}")
-def put_livro(id_livro: int, livro: Livro):
-    if id_livro not in meus_livros:
+def put_livro(id_livro: int, livro: Livro, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
+    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first() #conexão com o banco de dados e busca o livro pelo id
+    if not db_livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado.")
 
-    meus_livros[id_livro] = livro.dict()
-    return {"message": "Livro atualizado com sucesso.", "livro": meus_livros[id_livro]}
+    db_livro.nome_livro = livro.nome_livro
+    db_livro.autor_livro = livro.autor_livro
+    db_livro.ano_livro = livro.ano_livro
+
+    db.commit()
+    db.refresh(db_livro)
+
+    return {"message": "Livro atualizado com sucesso!", "livro": {"id": db_livro.id, "nome_livro": db_livro.nome_livro, "autor_livro": db_livro.autor_livro, "ano_livro": db_livro.ano_livro}}
+  
 
 @app.delete("/deletar/{id_livro}")
-def delete_livro(id_livro: int):
-    if id_livro not in meus_livros:
+def delete_livro(id_livro: int, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(autenticar_meu_usuario)):
+    db_livro = db.query(LivroDB).filter(LivroDB.id == id_livro).first()
+    if not db_livro:
         raise HTTPException(status_code=404, detail="Livro não encontrado.")
-    else:
-        del meus_livros[id_livro]
-        return {"message": "Livro deletado com sucesso."}
+    
+    db.delete(db_livro)
+    db.commit()
+    
+    return {"message": "Livro deletado com sucesso!", "livro": {"id": db_livro.id, "nome_livro": db_livro.nome_livro, "autor_livro": db_livro.autor_livro, "ano_livro": db_livro.ano_livro}}
