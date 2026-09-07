@@ -24,16 +24,14 @@ app = FastAPI(
     version="1.0.0",
     contact={
         "name": "Guilherme Magain Brum",
-        "email": "guimbrum@gmail.com",
-    },
+        "email": "guimbrum@gmail.com"
+    }
 )
 
 MEU_USUARIO = "admin"
 MINHA_SENHA = "794613825Gui@"
 
 security = HTTPBasic()
-
-meus_livros = {}
 
 class LivroDB(Base): #tabela de banco de dados para armazenar os livros, substituindo a estrutura de dados em memória (dicionário)
     __tablename__ = "livros"
