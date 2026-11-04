@@ -8,8 +8,11 @@ on:
     branches:
       - main
 
+env:
+  IMAGE_NAME: fastapi-app:latest
+
 jobs:
-  test:
+  test-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,13 +33,8 @@ jobs:
       - name: Executar os testes
         run: poetry run pytest
 
-jobs:
-  fastapi-docker-test:
-    runs-on: ubuntu-latest
-
-  steps:
-    - name: Checkout do código
-      uses: actions/checkout@v3
-
-    - name: build da imagem Docker
-      run: docker build -t my-fastapi-app .
+      - name: Build da imagem Docker
+        run: docker build -t ${{ env.IMAGE_NAME }} .
+        
+      - name: Validar o container
+        run: docker run -d ${{ env.IMAGE_NAME }}
