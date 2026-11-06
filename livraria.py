@@ -98,6 +98,10 @@ def autenticar_meu_usuario(credentials: HTTPBasicCredentials = Depends(security)
             headers={"WWW-Authenticate": "Basic"},
         )
 
+@app.get("/")
+def hello_world():
+    return {"Hello": "world!"}
+
 @app.post("/calcular/soma")
 def calcular_soma(a: int, b: int):
     tarefa = somar.delay(a, b)
