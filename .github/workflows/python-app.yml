@@ -14,18 +14,20 @@ env:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 
 
     steps:
       - name: Checkout do código
-        uses: actions/checkout@v3
-
-      - name: Instalar Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
+        uses: actions/checkout@v4
 
       - name: Instalar Poetry
         run: pip install poetry
+
+      - name: Instalar Python e configurar cache do Poetry
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14' 
+          cache: 'poetry'
 
       - name: Instalar dependências com Poetry
         run: poetry install --no-root --no-interaction
@@ -33,8 +35,8 @@ jobs:
       - name: Executar os testes
         run: poetry run pytest
 
-      - name: Build da imagem Docker
+      - name: Construir a imagem Docker
         run: docker build -t ${{ env.IMAGE_NAME }} .
-        
+
       - name: Validar o container
         run: docker run -d ${{ env.IMAGE_NAME }}
