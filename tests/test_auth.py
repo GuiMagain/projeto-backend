@@ -8,9 +8,9 @@ client = TestClient(app)
 os.environ["MEU_USUARIO"] = "guimbrum"
 os.environ["MINHA_SENHA"] = "1234Gui"
 
-@pytest.fixtures(autouse=True)
+@pytest.fixture(autouse=True)
 def mock_redis(mocker):
-    mock_redis_client = mocker.patch("main.redis_client", autospec=True)
+    mock_redis_client = mocker.patch("livraria.redis_client", autospec=True)
     mock_redis_client.get.return_value = None
 
 
