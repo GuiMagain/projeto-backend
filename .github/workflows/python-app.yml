@@ -29,8 +29,7 @@ jobs:
           python-version: '3.14' 
           cache: 'poetry'
 
-      - name: Instalar dependências com Poetry
-        run: poetry install --no-root --no-interaction
+      
 
       - name: Executar os testes
         run: poetry run pytest
@@ -40,3 +39,25 @@ jobs:
 
       - name: Validar o container
         run: docker run -d ${{ env.IMAGE_NAME }}
+
+      - name: Iniciar o container
+        run: docker run -d --name fastapi-app -p 8000:8000 ${{ env.IMAGE_NAME }}
+      
+      - name: Validar a aplicação
+        run: |
+          for i in {1..10}; do
+            if curl --fail http://localhost:8000/; then
+              echo "API iniciada e respondendo corretamente!"
+              exit 0
+            fi
+            echo "Aguardando a API iniciar..."
+            sleep 3
+          done
+      
+          echo "A API não respondeu dentro do tempo esperado."
+          docker logs fastapi-app
+          exit 1
+      
+      - name: Encerrar o container
+        if: always()
+        run: docker stop fastapi-app || true
