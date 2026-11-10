@@ -1,63 +1,52 @@
-name: CI Pipeline
+name: Python application
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
 
 env:
-  IMAGE_NAME: fastapi-app:latest
+  IMAGE_NAME: fastapi-app
+  IMAGE_TAG: latest
 
 jobs:
-  test-and-build:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 
 
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Instalar Poetry
-        run: pip install poetry
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
 
-      - name: Instalar Python e configurar cache do Poetry
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14' 
-          cache: 'poetry'
+    - name: Install Poetry
+      run: pip install poetry
 
-      
+    - name: Install dependencies
+      run: poetry install --no-root --no-interaction
 
-      - name: Executar os testes
-        run: poetry run pytest
+    - name: Run tests
+      run: poetry run pytest
 
-      - name: Construir a imagem Docker
-        run: docker build -t ${{ env.IMAGE_NAME }} .
+    - name: Build Docker image
+      run: docker build -t "$IMAGE_NAME:$IMAGE_TAG" .
 
-      - name: Validar o container
-        run: docker run -d ${{ env.IMAGE_NAME }}
+    - name: Run container and validate API
+      run: |
+        docker run -d --name api-test -p 8000:8000 "$IMAGE_NAME:$IMAGE_TAG"
+        for i in $(seq 1 15); do
+          if curl -fsS http://localhost:8000/docs > /dev/null; then
+            break
+          fi
+          sleep 2
+        done
+        curl -fsS http://localhost:8000/docs > /dev/null
 
-      - name: Iniciar o container
-        run: docker run -d --name fastapi-app -p 8000:8000 ${{ env.IMAGE_NAME }}
-      
-      - name: Validar a aplicação
-        run: |
-          for i in {1..10}; do
-            if curl --fail http://localhost:8000/; then
-              echo "API iniciada e respondendo corretamente!"
-              exit 0
-            fi
-            echo "Aguardando a API iniciar..."
-            sleep 3
-          done
-      
-          echo "A API não respondeu dentro do tempo esperado."
-          docker logs fastapi-app
-          exit 1
-      
-      - name: Encerrar o container
-        if: always()
-        run: docker stop fastapi-app || true
+    - name: Clean up container
+      if: always()
+      run: |
+        docker stop api-test || true
+        docker rm api-test || true
